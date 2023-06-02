@@ -53,11 +53,14 @@ def download_image(url, file_path):
 
 if __name__ == '__main__':
     # Load model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Using device: {device}')
+
     pretrained_ckpt = 'MAGAer13/mplug-owl-llama-7b'
     model = MplugOwlForConditionalGeneration.from_pretrained(
         pretrained_ckpt,
         torch_dtype=torch.bfloat16,
-    )
+    ).to(device)
     image_processor = MplugOwlImageProcessor.from_pretrained(pretrained_ckpt)
     tokenizer = MplugOwlTokenizer.from_pretrained(pretrained_ckpt)
     processor = MplugOwlProcessor(image_processor, tokenizer)
