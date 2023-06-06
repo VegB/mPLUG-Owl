@@ -1,5 +1,7 @@
 """
-CUDA_VISIBLE_DEVICES=? python inference.py
+CUDA_VISIBLE_DEVICES=? python inference.py \ 
+                    --input_csv ../MiniGPT-4/input_csv/visit_bench_single_image.csv \
+                    --output_dir ../MiniGPT-4/output_csv/visit_bench_single_image
 """
 
 # Load via Huggingface Style
@@ -18,7 +20,7 @@ from mplug_owl.tokenization_mplug_owl import MplugOwlTokenizer
 
 parser = argparse.ArgumentParser(description="Demo")
 parser.add_argument('--input_csv', type=str, default='../MiniGPT-4/input_csv/visit_instructions_700.csv')
-parser.add_argument('--output_csv', type=str, default='../MiniGPT-4/output_csv/mplug-owl.csv')
+parser.add_argument('--output_dir', type=str, default='../MiniGPT-4/output_csv/')
 parser.add_argument('--model_name', type=str, default='mPLUG-Owl')
 parser.add_argument('--verbose', action='store_true', default=False)
 args = parser.parse_args()
@@ -52,6 +54,11 @@ def download_image(url, file_path):
 
 
 if __name__ == '__main__':
+    # check output directory
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+    args.output_csv = os.path.join(args.output_dir, f'{args.model_name.lower()}.csv')
+
     # Load model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
@@ -82,7 +89,12 @@ if __name__ == '__main__':
         if args.verbose:
             print(row)
 
-        image_url_list = list(eval(row['images']))
+        if 'Input.image_url' in row.keys():
+            image_url_list = [row['Input.image_url']]
+        elif 'image' in row.keys():
+            image_url_list = [row['image']]
+        else:
+            image_url_list = list(eval(row['images']))
 
         if len(image_url_list) > 1:
             llm_prediction = '[SKIPPED]'
