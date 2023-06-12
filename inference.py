@@ -2,6 +2,8 @@
 CUDA_VISIBLE_DEVICES=? python inference.py \ 
                     --input_csv ../MiniGPT-4/input_csv/visit_bench_single_image.csv \
                     --output_dir ../MiniGPT-4/output_csv/visit_bench_single_image
+
+python inference.py --input_csv ../MiniGPT-4/input_csv/visit_bench.csv --output_dir ../MiniGPT-4/output_csv/visit_bench
 """
 
 # Load via Huggingface Style
@@ -11,6 +13,8 @@ from urllib.parse import urlparse
 import csv
 import argparse
 from PIL import Image
+import requests
+from io import BytesIO
 from tqdm import tqdm
 
 import torch
@@ -94,43 +98,37 @@ if __name__ == '__main__':
         elif 'image' in row.keys():
             image_url_list = [row['image']]
         else:
-            image_url_list = list(eval(row['images']))
+            image_url_list = list(eval(row['images'].replace(', NaN', '')))
 
-        if len(image_url_list) > 1:
-            llm_prediction = '[SKIPPED]'
+        # if row['is_multiple_images'] == 'False':
+        #     continue
 
-        else:
+        # prepare instruction prompt
+        sep = '\n'
+        prompts = [
+        f'''The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+{sep.join(['Human: <image>'] * len(image_url_list))}
+Human: {row["instruction"]}
+AI: ''']
 
-            # prepare instruction prompt
-            prompts = [
-            f'''The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
-            Human: <image>
-            Human: {row["instruction"]}
-            AI: ''']
+        # download image image
+        image_inputs = []
+        for img_url in image_url_list:
+            response = requests.get(img_url)
+            image_inputs.append(Image.open(BytesIO(response.content)).convert("RGB"))
 
-            # download image image
-            image_url = add_backslash_to_spaces(image_url_list[0])
-            extension = image_url.split('.')[-1]
-            img_path = os.path.join(os.getcwd(), f'tmp.{extension}')  # Create the local image file path
-            download_image(image_url, img_path)
-            image_list = [img_path]
-
-            images = [Image.open(_) for _ in image_list]
-            inputs = processor(text=prompts, images=images, return_tensors='pt')
-            inputs = {k: v.bfloat16() if v.dtype == torch.float else v for k, v in inputs.items()}
-            inputs = {k: v.to(model.device) for k, v in inputs.items()}
-            with torch.no_grad():
-                res = model.generate(**inputs, **generate_kwargs)
-            llm_prediction = tokenizer.decode(res.tolist()[0], skip_special_tokens=True)
-            
-            if args.verbose:
-                print(f'Question:\n\t{row["instruction"]}')
-                print(f'Image URL:\t{image_url}')
-                print(f'Answer:\n\t{llm_prediction}')
-                print('-'*30 + '\n')
-
-            # Clean up
-            os.remove(img_path)
+        inputs = processor(text=prompts, images=image_inputs, return_tensors='pt')
+        inputs = {k: v.bfloat16() if v.dtype == torch.float else v for k, v in inputs.items()}
+        inputs = {k: v.to(model.device) for k, v in inputs.items()}
+        with torch.no_grad():
+            res = model.generate(**inputs, **generate_kwargs)
+        llm_prediction = tokenizer.decode(res.tolist()[0], skip_special_tokens=True)
+        
+        if args.verbose:
+            print(f'Question:\n\t{row["instruction"]}')
+            print(f'Image URL:\t{image_url_list}')
+            print(f'Answer:\n\t{llm_prediction}')
+            print('-'*30 + '\n')
 
         row[prediction_fieldname] = llm_prediction
         output_data_list.append(row)
