@@ -8,6 +8,7 @@ python inference.py --input_csv ../MiniGPT-4/input_csv/visit_bench.csv --output_
 
 # Load via Huggingface Style
 import os
+import json
 import urllib.request
 from urllib.parse import urlparse
 import csv
@@ -112,10 +113,16 @@ Human: {row["instruction"]}
 AI: ''']
 
         # download image image
-        image_inputs = []
-        for img_url in image_url_list:
-            response = requests.get(img_url)
-            image_inputs.append(Image.open(BytesIO(response.content)).convert("RGB"))
+        try:
+            image_inputs = []
+            for img_url in image_url_list:
+                response = requests.get(img_url)
+                image_inputs.append(Image.open(BytesIO(response.content)).convert("RGB"))
+        except Exception as e:
+            print(f'Error occurred while downloading the image: {e}')
+            row[prediction_fieldname] = f'[Error]: {e}'
+            output_data_list.append(row)
+            continue
 
         inputs = processor(text=prompts, images=image_inputs, return_tensors='pt')
         inputs = {k: v.bfloat16() if v.dtype == torch.float else v for k, v in inputs.items()}
@@ -132,6 +139,9 @@ AI: ''']
 
         row[prediction_fieldname] = llm_prediction
         output_data_list.append(row)
+
+        with open('tmp.json', 'w') as f:
+            json.dump(output_data_list, f, indent=2)
 
     # Write to output csv file
     output_file = args.output_csv
