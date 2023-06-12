@@ -40,9 +40,11 @@ def read_csv_file(file_path):
     return csv_reader.fieldnames, data
 
 
-def add_backslash_to_spaces(url):
+def check_url(url):
     if ' ' in url:
         url = url.replace(' ', "%20")
+    if '+' in url:
+        url = url.replace('+', "%2B")
     return url
 
 
@@ -116,7 +118,7 @@ AI: ''']
         try:
             image_inputs = []
             for img_url in image_url_list:
-                response = requests.get(img_url)
+                response = requests.get(check_url(img_url))
                 image_inputs.append(Image.open(BytesIO(response.content)).convert("RGB"))
         except Exception as e:
             print(f'Error occurred while downloading the image: {e}')
